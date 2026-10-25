@@ -1,0 +1,165 @@
+{% extends 'library/base.html' %}
+
+{% block title %}
+مكتبة الجامعة
+{% endblock %}
+
+
+{% block content %}
+
+<!-- الترحيب -->
+<div class="text-center mb-3">
+
+    <h1 class="welcome-title">
+        مرحباً بك في مكتبة الجامعة 📖
+    </h1>
+
+    <p class="welcome-subtitle">
+        اكتشف الكتب المتوفرة واستعر ما يناسبك
+    </p>
+
+</div>
+
+
+<!-- البحث -->
+<div class="home-search">
+
+    <form method="GET"
+          action="/search/">
+
+        <div class="input-group">
+
+            <input
+                type="text"
+                name="q"
+                class="form-control"
+                placeholder="ابحث عن كتاب بالعنوان أو المؤلف..."
+            >
+
+            <button
+                class="btn btn-primary"
+                type="submit">
+                🔍 بحث
+            </button>
+
+        </div>
+
+    </form>
+
+</div>
+
+
+<!-- قائمة الكتب -->
+<div class="content-panel">
+
+    <div class="d-flex justify-content-between align-items-center mb-3">
+
+        <h2 class="section-title mb-0">
+            📚 قائمة الكتب
+        </h2>
+
+        {% if user.is_staff %}
+        <a href="/book/add/"
+           class="btn btn-success btn-sm">
+            + إضافة كتاب
+        </a>
+        {% endif %}
+
+    </div>
+
+
+    <div class="row g-3">
+
+        {% for book in books %}
+
+        <div class="col-lg-4 col-md-6">
+
+            <div class="book-card">
+
+                <div class="book-card-body">
+
+                    <div class="book-title">
+                        {{ book.title }}
+                    </div>
+
+                    <div class="book-info">
+                        <strong>المؤلف:</strong>
+                        {{ book.author }}
+                    </div>
+
+                    <div class="book-info">
+                        <strong>عدد النسخ المتاحة:</strong>
+                        {{ book.quantity }}
+                    </div>
+
+                    <div class="book-info">
+
+                        <strong>الحالة:</strong>
+
+                        {% if book.available and book.quantity > 0 %}
+
+                            <span class="badge bg-success">
+                                متوفر
+                            </span>
+
+                        {% else %}
+
+                            <span class="badge bg-danger">
+                                غير متوفر
+                            </span>
+
+                        {% endif %}
+
+                    </div>
+
+                </div>
+
+
+                <div class="book-card-footer">
+
+                    <a
+                        href="/book/{{ book.pk }}/"
+                        class="btn btn-primary btn-sm">
+                        تفاصيل
+                    </a>
+
+
+                    {% if user.is_staff %}
+
+                    <a
+                        href="/book/{{ book.pk }}/edit/"
+                        class="btn btn-warning btn-sm">
+                        تعديل
+                    </a>
+
+                    <a
+                        href="/book/{{ book.pk }}/delete/"
+                        class="btn btn-danger btn-sm">
+                        حذف
+                    </a>
+
+                    {% endif %}
+
+                </div>
+
+            </div>
+
+        </div>
+
+        {% empty %}
+
+        <div class="col-12 text-center">
+
+            <p class="text-muted mb-0">
+                لا توجد كتب حالياً.
+            </p>
+
+        </div>
+
+        {% endfor %}
+
+    </div>
+
+</div>
+
+{% endblock %}

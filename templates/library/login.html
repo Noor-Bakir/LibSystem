@@ -1,0 +1,84 @@
+{% extends 'library/base.html' %}
+
+{% block title %}
+تسجيل الدخول
+{% endblock %}
+
+
+{% block content %}
+
+<div class="content-panel">
+
+    <div class="row justify-content-center">
+
+        <div class="col-md-5">
+
+            <div class="card border-0 shadow-sm">
+
+                <div class="card-header bg-primary text-white">
+                    <h4 class="mb-0">
+                        🔐 تسجيل الدخول
+                    </h4>
+                </div>
+
+
+                <div class="card-body">
+
+                    <form method="POST">
+
+                        {% csrf_token %}
+
+
+                        {% for field in form %}
+
+                        <div class="mb-3">
+
+                            <label class="form-label">
+                                {{ field.label }}
+                            </label>
+
+                            {{ field }}
+
+                            {% if field.errors %}
+
+                            <div class="text-danger mt-1">
+                                {{ field.errors }}
+                            </div>
+
+                            {% endif %}
+
+                        </div>
+
+                        {% endfor %}
+
+
+                        <button
+                            type="submit"
+                            class="btn btn-primary w-100">
+                            دخول
+                        </button>
+
+                    </form>
+
+
+                    <hr>
+
+
+                    <p class="text-center mb-0">
+                        ليس لديك حساب؟
+                        <a href="/register/">
+                            سجّل الآن
+                        </a>
+                    </p>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+
+{% endblock %}

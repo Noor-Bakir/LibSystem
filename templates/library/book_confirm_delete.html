@@ -1,0 +1,51 @@
+{% extends 'library/base.html' %}
+
+{% block title %}
+حذف الكتاب
+{% endblock %}
+
+
+{% block content %}
+
+<div class="content-panel">
+
+    <div class="card border-0 shadow-sm">
+
+        <div class="card-body">
+
+            <h4 class="text-danger">
+                هل أنت متأكد من حذف هذا الكتاب؟
+            </h4>
+
+            <p class="mt-3">
+                <strong>
+                    {{ book.title }}
+                </strong>
+            </p>
+
+
+            <form method="POST">
+
+                {% csrf_token %}
+
+                <button
+                    type="submit"
+                    class="btn btn-danger">
+                    نعم، حذف الكتاب
+                </button>
+
+                <a
+                    href="/"
+                    class="btn btn-secondary">
+                    إلغاء
+                </a>
+
+            </form>
+
+        </div>
+
+    </div>
+
+</div>
+
+{% endblock %}

@@ -1,0 +1,83 @@
+{% extends 'library/base.html' %}
+
+{% block title %}
+{{ title }}
+{% endblock %}
+
+
+{% block content %}
+
+<div class="content-panel">
+
+    <div class="row justify-content-center">
+
+        <div class="col-md-7">
+
+            <div class="card border-0 shadow-sm">
+
+                <div class="card-header bg-primary text-white">
+
+                    <h4 class="mb-0">
+                        {{ title }}
+                    </h4>
+
+                </div>
+
+
+                <div class="card-body">
+
+                    <form method="POST">
+
+                        {% csrf_token %}
+
+
+                        {% for field in form %}
+
+                        <div class="mb-3">
+
+                            <label class="form-label">
+                                {{ field.label }}
+                            </label>
+
+                            {{ field }}
+
+
+                            {% if field.errors %}
+
+                            <div class="text-danger mt-1">
+                                {{ field.errors }}
+                            </div>
+
+                            {% endif %}
+
+                        </div>
+
+                        {% endfor %}
+
+
+                        <button
+                            type="submit"
+                            class="btn btn-success">
+                            حفظ
+                        </button>
+
+
+                        <a
+                            href="/"
+                            class="btn btn-secondary">
+                            إلغاء
+                        </a>
+
+                    </form>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+
+{% endblock %}

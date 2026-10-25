@@ -1,0 +1,70 @@
+{% extends 'library/base.html' %}
+
+{% block title %}
+حذف سجل الاستعارة
+{% endblock %}
+
+
+{% block content %}
+
+<div class="content-panel">
+
+    <div class="card border-0 shadow-sm">
+
+        <div class="card-body">
+
+            <h4 class="text-danger mb-4">
+                هل أنت متأكد من حذف سجل الاستعارة هذا؟
+            </h4>
+
+
+            <div class="mb-4">
+
+                <p>
+                    <strong>الكتاب:</strong>
+                    {{ borrowing.book.title }}
+                </p>
+
+                <p>
+                    <strong>المستخدم:</strong>
+                    {{ borrowing.user.username }}
+                </p>
+
+                <p>
+                    <strong>تاريخ الاستعارة:</strong>
+                    {{ borrowing.borrow_date|date:"Y-m-d" }}
+                </p>
+
+                <p>
+                    <strong>تاريخ الإرجاع:</strong>
+                    {{ borrowing.return_date|date:"Y-m-d" }}
+                </p>
+
+            </div>
+
+
+            <form method="POST">
+
+                {% csrf_token %}
+
+                <button
+                    type="submit"
+                    class="btn btn-danger">
+                    نعم، حذف السجل
+                </button>
+
+                <a
+                    href="/dashboard/"
+                    class="btn btn-secondary">
+                    إلغاء
+                </a>
+
+            </form>
+
+        </div>
+
+    </div>
+
+</div>
+
+{% endblock %}

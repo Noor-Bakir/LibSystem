@@ -1,0 +1,250 @@
+{% extends 'library/base.html' %}
+
+{% block title %}
+لوحة تحكم المسؤول
+{% endblock %}
+
+
+{% block content %}
+
+<div class="content-panel">
+
+    <div class="d-flex justify-content-between align-items-center mb-4">
+
+        <h2 class="mb-0">
+            📊 لوحة التحكم
+        </h2>
+
+        <a
+            href="/"
+            class="btn btn-secondary btn-sm">
+            العودة للمكتبة
+        </a>
+
+    </div>
+
+
+    <!-- الإحصائيات -->
+
+    <div class="row g-3 mb-4">
+
+        <div class="col-lg-3 col-md-6">
+
+            <div class="card dashboard-card text-white bg-primary">
+
+                <div class="card-body text-center">
+
+                    <h2>
+                        {{ total_books }}
+                    </h2>
+
+                    <p class="mb-0">
+                        إجمالي الكتب
+                    </p>
+
+                </div>
+
+            </div>
+
+        </div>
+
+
+        <div class="col-lg-3 col-md-6">
+
+            <div class="card dashboard-card text-white bg-success">
+
+                <div class="card-body text-center">
+
+                    <h2>
+                        {{ available_books }}
+                    </h2>
+
+                    <p class="mb-0">
+                        كتب متوفرة
+                    </p>
+
+                </div>
+
+            </div>
+
+        </div>
+
+
+        <div class="col-lg-3 col-md-6">
+
+            <div class="card dashboard-card text-white bg-danger">
+
+                <div class="card-body text-center">
+
+                    <h2>
+                        {{ borrowed_books }}
+                    </h2>
+
+                    <p class="mb-0">
+                        كتب مستعارة حالياً
+                    </p>
+
+                </div>
+
+            </div>
+
+        </div>
+
+
+        <div class="col-lg-3 col-md-6">
+
+            <div class="card dashboard-card text-white bg-warning">
+
+                <div class="card-body text-center">
+
+                    <h2>
+                        {{ total_borrowings }}
+                    </h2>
+
+                    <p class="mb-0">
+                        إجمالي سجلات الاستعارة
+                    </p>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+    <!-- سجل الاستعارات -->
+
+    <div class="card border-0 shadow-sm">
+
+        <div class="card-header bg-dark text-white">
+
+            <h5 class="mb-0">
+                📋 سجل الاستعارات
+            </h5>
+
+        </div>
+
+
+        <div class="card-body">
+
+            {% if recent_borrowings %}
+
+            <div class="table-container">
+
+                <table class="table table-hover align-middle">
+
+                    <thead>
+
+                        <tr>
+
+                            <th>الكتاب</th>
+                            <th>المستخدم</th>
+                            <th>تاريخ الاستعارة</th>
+                            <th>تاريخ الإرجاع</th>
+                            <th>الحالة</th>
+                            <th>الإجراء</th>
+
+                        </tr>
+
+                    </thead>
+
+
+                    <tbody>
+
+                        {% for b in recent_borrowings %}
+
+                        <tr>
+
+                            <td>
+                                {{ b.book.title }}
+                            </td>
+
+                            <td>
+                                {{ b.user.username }}
+                            </td>
+
+                            <td>
+                                {{ b.borrow_date|date:"Y-m-d" }}
+                            </td>
+
+                            <td>
+
+                                {% if b.return_date %}
+
+                                    {{ b.return_date|date:"Y-m-d" }}
+
+                                {% else %}
+
+                                    -
+
+                                {% endif %}
+
+                            </td>
+
+
+                            <td>
+
+                                {% if b.returned %}
+
+                                    <span class="badge bg-success">
+                                        مُرجع
+                                    </span>
+
+                                {% else %}
+
+                                    <span class="badge bg-danger">
+                                        مستعار
+                                    </span>
+
+                                {% endif %}
+
+                            </td>
+
+
+                            <td>
+
+                                {% if b.returned %}
+
+                                    <a
+                                        href="/borrowing/{{ b.pk }}/delete/"
+                                        class="btn btn-danger btn-sm">
+                                        حذف السجل
+                                    </a>
+
+                                {% else %}
+
+                                    <span class="text-muted">
+                                        غير متاح
+                                    </span>
+
+                                {% endif %}
+
+                            </td>
+
+                        </tr>
+
+                        {% endfor %}
+
+                    </tbody>
+
+                </table>
+
+            </div>
+
+            {% else %}
+
+                <div class="alert alert-info mb-0">
+                    لا توجد استعارات بعد.
+                </div>
+
+            {% endif %}
+
+        </div>
+
+    </div>
+
+</div>
+
+{% endblock %}

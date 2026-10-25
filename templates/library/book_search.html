@@ -1,0 +1,135 @@
+{% extends 'library/base.html' %}
+
+{% block title %}
+البحث عن كتاب
+{% endblock %}
+
+
+{% block content %}
+
+<div class="content-panel">
+
+    <h2 class="section-title">
+        🔍 البحث عن كتاب
+    </h2>
+
+
+    <form method="GET"
+          action="/search/"
+          class="mb-4">
+
+        <div class="input-group">
+
+            <input
+                type="text"
+                name="q"
+                class="form-control"
+                placeholder="ابحث بالعنوان أو المؤلف..."
+                value="{{ query }}"
+            >
+
+            <button
+                class="btn btn-primary"
+                type="submit">
+                بحث 🔍
+            </button>
+
+        </div>
+
+    </form>
+
+
+    {% if query %}
+
+        <h5 class="mb-3">
+            نتائج البحث عن:
+            <strong>{{ query }}</strong>
+        </h5>
+
+
+        <div class="row g-3">
+
+            {% for book in books %}
+
+            <div class="col-lg-4 col-md-6">
+
+                <div class="book-card">
+
+                    <div class="book-card-body">
+
+                        <div class="book-title">
+                            {{ book.title }}
+                        </div>
+
+                        <div class="book-info">
+                            <strong>المؤلف:</strong>
+                            {{ book.author }}
+                        </div>
+
+                        <div class="book-info">
+                            <strong>عدد النسخ المتاحة:</strong>
+                            {{ book.quantity }}
+                        </div>
+
+                        <div class="book-info">
+
+                            <strong>الحالة:</strong>
+
+                            {% if book.available and book.quantity > 0 %}
+
+                            <span class="badge bg-success">
+                                متوفر
+                            </span>
+
+                            {% else %}
+
+                            <span class="badge bg-danger">
+                                غير متوفر
+                            </span>
+
+                            {% endif %}
+
+                        </div>
+
+                    </div>
+
+
+                    <div class="book-card-footer">
+
+                        <a
+                            href="/book/{{ book.pk }}/"
+                            class="btn btn-primary btn-sm">
+                            تفاصيل
+                        </a>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+            {% empty %}
+
+            <div class="col-12">
+
+                <div class="alert alert-warning">
+                    لا توجد نتائج مطابقة لبحثك.
+                </div>
+
+            </div>
+
+            {% endfor %}
+
+        </div>
+
+    {% else %}
+
+        <div class="alert alert-info">
+            اكتب اسم الكتاب أو المؤلف في مربع البحث.
+        </div>
+
+    {% endif %}
+
+</div>
+
+{% endblock %}

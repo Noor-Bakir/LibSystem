@@ -1,0 +1,124 @@
+{% extends 'library/base.html' %}
+
+{% block title %}
+تفاصيل الكتاب
+{% endblock %}
+
+
+{% block content %}
+
+<div class="content-panel detail-panel">
+
+    <div class="d-flex justify-content-between align-items-center mb-4">
+
+        <h2 class="mb-0">
+            📖 تفاصيل الكتاب
+        </h2>
+
+        <a href="/"
+           class="btn btn-secondary btn-sm">
+            رجوع
+        </a>
+
+    </div>
+
+
+    <div class="card border-0">
+
+        <div class="card-body">
+
+            <h2 class="mb-4">
+                {{ book.title }}
+            </h2>
+
+
+            <div class="row">
+
+                <div class="col-md-6">
+
+                    <p>
+                        <strong>المؤلف:</strong>
+                        {{ book.author }}
+                    </p>
+
+                    <p>
+                        <strong>ISBN:</strong>
+                        {{ book.isbn }}
+                    </p>
+
+                </div>
+
+
+                <div class="col-md-6">
+
+                    <p>
+                        <strong>عدد النسخ المتاحة:</strong>
+                        {{ book.quantity }}
+                    </p>
+
+                    <p>
+
+                        <strong>الحالة:</strong>
+
+                        {% if book.available and book.quantity > 0 %}
+
+                        <span class="badge bg-success">
+                            متوفر
+                        </span>
+
+                        {% else %}
+
+                        <span class="badge bg-danger">
+                            غير متوفر
+                        </span>
+
+                        {% endif %}
+
+                    </p>
+
+                </div>
+
+            </div>
+
+
+            <hr>
+
+
+            {% if user.is_authenticated %}
+
+                {% if book.available and book.quantity > 0 %}
+
+                    <a
+                        href="/book/{{ book.pk }}/borrow/"
+                        class="btn btn-primary">
+                        📚 استعر الكتاب
+                    </a>
+
+                {% else %}
+
+                    <button
+                        class="btn btn-secondary"
+                        disabled>
+                        غير متوفر حالياً
+                    </button>
+
+                {% endif %}
+
+            {% else %}
+
+                <a
+                    href="/login/"
+                    class="btn btn-outline-primary">
+                    سجّل دخولك للاستعارة
+                </a>
+
+            {% endif %}
+
+
+        </div>
+
+    </div>
+
+</div>
+
+{% endblock %}
