@@ -1,0 +1,782 @@
+From d36ffef27b8089542dd6a0ecf860d85486266ae2 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Fri, 30 Oct 2026 00:53:09 +0300
+Subject: [PATCH] Convert library system to installable mobile PWA and fix bugs
+
+- Add PWA: manifest, service worker, offline page, app icons
+- Mobile UI: collapsible navbar, bottom tab bar, larger touch targets
+- Fix: add missing borrowing delete route/view
+- Fix: restrict dashboard and book add/edit/delete to staff
+- Fix: borrowing now decrements quantity; return restores it
+  and records the real return date; prevent duplicate borrows
+- Fix: dashboard borrowed count based on active borrowings
+- Settings: ALLOWED_HOSTS, Arabic locale, Damascus timezone
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_0111tPRExU1tsgEg6BtnxkFN
+---
+ library/pwa.py                            |  80 +++++++
+ library/static/library/icons/icon-192.png | Bin 0 -> 759 bytes
+ library/static/library/icons/icon-512.png | Bin 0 -> 2290 bytes
+ library/urls.py                           |   8 +-
+ library/views.py                          | 127 ++++++++---
+ library_project/settings.py               |   8 +-
+ templates/library/base.html               | 256 +++++++++++++++++++---
+ templates/library/offline.html            |  11 +
+ 8 files changed, 416 insertions(+), 74 deletions(-)
+ create mode 100644 library/pwa.py
+ create mode 100644 library/static/library/icons/icon-192.png
+ create mode 100644 library/static/library/icons/icon-512.png
+ create mode 100644 templates/library/offline.html
+
+diff --git a/library/pwa.py b/library/pwa.py
+new file mode 100644
+index 0000000..65eef55
+--- /dev/null
++++ b/library/pwa.py
+@@ -0,0 +1,80 @@
++from django.http import JsonResponse, HttpResponse
++from django.shortcuts import render
++from django.templatetags.static import static
++
++CACHE_VERSION = 'library-v1'
++
++
++def manifest(request):
++    data = {
++        "name": "مكتبة الجامعة",
++        "short_name": "المكتبة",
++        "description": "نظام إدارة مكتبة جامعية - استعارة وبحث عن الكتب",
++        "start_url": "/",
++        "scope": "/",
++        "display": "standalone",
++        "orientation": "portrait",
++        "dir": "rtl",
++        "lang": "ar",
++        "background_color": "#14232d",
++        "theme_color": "#14232d",
++        "icons": [
++            {"src": static("library/icons/icon-192.png"), "sizes": "192x192",
++             "type": "image/png", "purpose": "any maskable"},
++            {"src": static("library/icons/icon-512.png"), "sizes": "512x512",
++             "type": "image/png", "purpose": "any maskable"},
++        ],
++    }
++    return JsonResponse(data, content_type="application/manifest+json")
++
++
++def service_worker(request):
++    js = """
++const CACHE = '%(version)s';
++const PRECACHE = ['/offline/', '%(icon)s'];
++
++self.addEventListener('install', e => {
++  e.waitUntil(caches.open(CACHE).then(c => c.addAll(PRECACHE)));
++  self.skipWaiting();
++});
++
++self.addEventListener('activate', e => {
++  e.waitUntil(
++    caches.keys().then(keys =>
++      Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
++    )
++  );
++  self.clients.claim();
++});
++
++self.addEventListener('fetch', e => {
++  const req = e.request;
++  if (req.method !== 'GET') return;
++  const url = new URL(req.url);
++
++  // الملفات الثابتة (محلية أو CDN): من الكاش أولاً
++  if (url.pathname.startsWith('/static/') || url.hostname.includes('cdn.jsdelivr.net')) {
++    e.respondWith(
++      caches.match(req).then(hit => hit || fetch(req).then(res => {
++        const copy = res.clone();
++        caches.open(CACHE).then(c => c.put(req, copy));
++        return res;
++      }))
++    );
++    return;
++  }
++
++  // الصفحات: من الشبكة أولاً، وصفحة بلا اتصال عند الفشل
++  if (req.mode === 'navigate') {
++    e.respondWith(fetch(req).catch(() => caches.match('/offline/')));
++  }
++});
++""" % {"version": CACHE_VERSION, "icon": static("library/icons/icon-192.png")}
++    response = HttpResponse(js, content_type="application/javascript")
++    response["Service-Worker-Allowed"] = "/"
++    response["Cache-Control"] = "no-cache"
++    return response
++
++
++def offline(request):
++    return render(request, "library/offline.html")
+diff --git a/library/static/library/icons/icon-192.png b/library/static/library/icons/icon-192.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..d997fa650dbceadb2634a4b89a3eae51a26c26d8
+GIT binary patch
+literal 759
+zcmeAS@N?(olHy`uVBq!ia0y~yU^oE6983%h40rea4q#wl+UM!w7*Y}U_O@eJl%t5l
+z#rzXObF2&AsC<#zG$YPmU#&W06MMOklXHQ>wzs|eUmdpm{HQZ--XZ<+-;XmJ-D|7A
+zDEv`X5MrFj(c$8t!lWc9(AnU@;-W-%p-;AR<1YUEzP@ysY~7zdwlDs^-EdC3veI_F
+z@roO7`<EBhv94ZP{4&dJ_0r<ZPd#b>xuk>6Z;F{|y<}dhq}g}B&Fn{>EaS_#^6O`T
+zW$l$;KMl%$<p#4K`GdnNlg{2@|MmRxZ!7+aHw$kY>qVXUbK|v^bVo|H^oxzTA9-fq
+z7CWE7OgK<B?fvbLr{Z^%P3h)6wj$+1Ei*#lmr{M*GDc%|7q82vy}VDHZieKL64WWL
+z8s>du@A)0;S6^v+zy8C1Y3sk+Rx(Rv<m{fFwk|z#8GptJ_R7*16ZnfxT+qMywtu<4
+ztVHV8`p-49-u%9uIM+P!U)8i!Yeqx${fz?>&8P|Mq&!2t&ui0H+_M-M7#KWV{an^L
+HB{Ts5?A!nb
+
+literal 0
+HcmV?d00001
+
+diff --git a/library/static/library/icons/icon-512.png b/library/static/library/icons/icon-512.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..241e60a5e72dce8392e3df1b8084a015b3d34b37
+GIT binary patch
+literal 2290
+zcmeAS@N?(olHy`uVBq!ia0y~yU}6Aa4iHr><-C@Gfn%qqi(^Pd+}m3ReYHJB90DZ-
+znX2_8Hak9XFgWr!VGeT<-`tZKW*jf;C2!xA3jJ!E-s^KcdXM+)s+zjWT80JB=ii&i
+z_@keJ!G)8-Vag~q8U(N)xDx#3j`gNF{?=A!quRIkZ<YTzd;Q~w+vPbc|Hn8jzdQH%
+z^Xb>`%4!|Fw?F5z(2d{IH4pZ%B-n-h|7v!!;cC6D<c#kBj6TP{?LYae@a8{r!*x43
+z4)|PKzj=YF^X7B!5;BAZ8#32KrWAhfJ*TvL_QkVK49^Pgb3MMjmU+veFrx#S90yqP
+zV&nc?{hGXGk6B{RV_}8{4MvH(U+cGjTAkhY^8Gbl$!8B(7!<r17#6W4WL&RFJ?N{~
+ze<fUOw(+HjbW6*&uIFV7Dt_O1tvUU3=7Gg~>-CuJuBz?pYxlKlzgWS{&>;kJHk>Nr
+z&e(ozkJjeob*Btu^BEWdnHU6A2b}W1Sj;YS&+c2*si!qkA2Qz0Ki%NJwR8RB#L4Fq
+zP40oh7aGhE>JHPbwTA0Yy_vDv$mh5;JiQET&H<%X#`f*~d*>Bd&S$f^_4~QegW%jp
+zuPbgmDVFFpM~MYcoNR9>%RaN($oknTp35KE216{6m=v6?_tf(Itr6a3bLso})I-L+
+zXFc52U`c85XWa{J>m--0*D*_((JaiMweIG>oD<*V=QH>mc=l`l%@`Ms12QHFOQYFW
+zFltLa5MfD>+P=<U-(7Pn?KgRD=G=@kPS$qo<ej~sv&mZGmW$l{_&D{d7&$q)X`fHZ
+ztlOCO_5YVro0!k9H~d<z%&>V<<LPa;{@qV`V063Qjmf}P^+)FCz5mr!f1JEGe-;CS
+q%TINK0ZttQn>I&n#}Wj8xo?!t@KG(Z-o(Jbz~JfX=d#Wzp$Py?y%}@>
+
+literal 0
+HcmV?d00001
+
+diff --git a/library/urls.py b/library/urls.py
+index 184ab18..559c2cb 100644
+--- a/library/urls.py
++++ b/library/urls.py
+@@ -1,5 +1,5 @@
+ from django.urls import path
+-from . import views
++from . import views, pwa
+ 
+ urlpatterns = [
+     path('', views.book_list, name='book_list'),
+@@ -15,4 +15,10 @@ urlpatterns = [
+     path('borrowing/<int:pk>/return/', views.return_book, name='return_book'),
+     path('my-books/', views.my_books, name='my_books'),
+     path('dashboard/', views.dashboard, name='dashboard'),
++    path('borrowing/<int:pk>/delete/', views.borrowing_delete, name='borrowing_delete'),
++
++    # PWA
++    path('manifest.json', pwa.manifest, name='manifest'),
++    path('sw.js', pwa.service_worker, name='service_worker'),
++    path('offline/', pwa.offline, name='offline'),
+ ]
+diff --git a/library/views.py b/library/views.py
+index 12f4578..0b92aab 100644
+--- a/library/views.py
++++ b/library/views.py
+@@ -1,23 +1,44 @@
+ from django.shortcuts import render, get_object_or_404, redirect
++from django.contrib import messages
++from django.contrib.auth import login, logout
++from django.contrib.auth.forms import UserCreationForm, AuthenticationForm
++from django.contrib.auth.decorators import login_required, user_passes_test
++from django.db import transaction
++from django.db.models import Q
++from django.utils import timezone
++
+ from .models import Book, Borrowing
+ from .forms import BookForm
+-from django.contrib import messages
++
++
++# السماح للموظفين (المسؤولين) فقط
++staff_required = user_passes_test(lambda u: u.is_active and u.is_staff, login_url='/login/')
++
++
+ # الصفحة الرئيسية - عرض كل الكتب
+ def book_list(request):
+     books = Book.objects.all()
+     return render(request, 'library/book_list.html', {'books': books})
+ 
++
+ # صفحة تفاصيل كتاب معين
+ def book_detail(request, pk):
+     book = get_object_or_404(Book, pk=pk)
+     return render(request, 'library/book_detail.html', {'book': book})
+ 
++
+ # صفحة البحث عن كتاب
+ def book_search(request):
+-    query = request.GET.get('q', '')
+-    books = Book.objects.filter(title__icontains=query) | Book.objects.filter(author__icontains=query)
++    query = request.GET.get('q', '').strip()
++    books = Book.objects.none()
++    if query:
++        books = Book.objects.filter(
++            Q(title__icontains=query) | Q(author__icontains=query)
++        )
+     return render(request, 'library/book_search.html', {'books': books, 'query': query})
+ 
++
++@staff_required
+ def book_add(request):
+     if request.method == 'POST':
+         form = BookForm(request.POST)
+@@ -29,6 +50,8 @@ def book_add(request):
+         form = BookForm()
+     return render(request, 'library/book_form.html', {'form': form, 'title': 'إضافة كتاب'})
+ 
++
++@staff_required
+ def book_edit(request, pk):
+     book = get_object_or_404(Book, pk=pk)
+     if request.method == 'POST':
+@@ -41,6 +64,8 @@ def book_edit(request, pk):
+         form = BookForm(instance=book)
+     return render(request, 'library/book_form.html', {'form': form, 'title': 'تعديل كتاب'})
+ 
++
++@staff_required
+ def book_delete(request, pk):
+     book = get_object_or_404(Book, pk=pk)
+     if request.method == 'POST':
+@@ -48,27 +73,26 @@ def book_delete(request, pk):
+         messages.success(request, 'تم حذف الكتاب بنجاح ✅')
+         return redirect('book_list')
+     return render(request, 'library/book_confirm_delete.html', {'book': book})
+-from django.contrib.auth import login, logout, authenticate
+-from django.contrib.auth.forms import UserCreationForm, AuthenticationForm
+-from django.contrib.auth.decorators import login_required
++
+ 
+ # تسجيل الدخول
+ def user_login(request):
+     if request.method == 'POST':
+         form = AuthenticationForm(data=request.POST)
+         if form.is_valid():
+-            user = form.get_user()
+-            login(request, user)
++            login(request, form.get_user())
+             return redirect('book_list')
+     else:
+         form = AuthenticationForm()
+     return render(request, 'library/login.html', {'form': form})
+ 
++
+ # تسجيل الخروج
+ def user_logout(request):
+     logout(request)
+     return redirect('book_list')
+ 
++
+ # إنشاء حساب جديد
+ def user_register(request):
+     if request.method == 'POST':
+@@ -81,49 +105,84 @@ def user_register(request):
+         form = UserCreationForm()
+     return render(request, 'library/register.html', {'form': form})
+ 
++
+ # استعارة كتاب
+ @login_required
+ def borrow_book(request, pk):
+-    book = get_object_or_404(Book, pk=pk)
+-    if book.available:
+-        Borrowing.objects.create(user=request.user, book=book)
+-        book.available = False
+-        book.save()
++    with transaction.atomic():
++        book = get_object_or_404(Book.objects.select_for_update(), pk=pk)
++
++        if Borrowing.objects.filter(user=request.user, book=book, returned=False).exists():
++            messages.warning(request, 'لقد استعرت هذا الكتاب بالفعل.')
++        elif book.available and book.quantity > 0:
++            Borrowing.objects.create(user=request.user, book=book)
++            book.quantity -= 1
++            book.available = book.quantity > 0
++            book.save()
++            messages.success(request, 'تمت الاستعارة بنجاح ✅')
++        else:
++            messages.error(request, 'الكتاب غير متوفر حالياً.')
++
+     return redirect('book_detail', pk=pk)
+ 
++
+ # إرجاع كتاب
+ @login_required
+ def return_book(request, pk):
+-    borrowing = get_object_or_404(Borrowing, pk=pk, user=request.user)
+-    borrowing.returned = True
+-    borrowing.return_date = borrowing.borrow_date
+-    borrowing.save()
+-    borrowing.book.available = True
+-    borrowing.book.save()
++    with transaction.atomic():
++        borrowing = get_object_or_404(
++            Borrowing.objects.select_for_update(), pk=pk, user=request.user
++        )
++        if borrowing.returned:
++            messages.info(request, 'تم إرجاع هذا الكتاب مسبقاً.')
++        else:
++            borrowing.returned = True
++            borrowing.return_date = timezone.localdate()
++            borrowing.save()
++
++            book = borrowing.book
++            book.quantity += 1
++            book.available = True
++            book.save()
++            messages.success(request, 'تم إرجاع الكتاب ✅')
+     return redirect('my_books')
+ 
++
+ # كتب المستخدم المستعارة
+ @login_required
+ def my_books(request):
+-    borrowings = Borrowing.objects.filter(user=request.user, returned=False)
++    borrowings = Borrowing.objects.filter(
++        user=request.user, returned=False
++    ).select_related('book')
+     return render(request, 'library/my_books.html', {'borrowings': borrowings})
+ 
+-from django.contrib.auth.decorators import login_required
+-from django.db.models import Count
+ 
+ # لوحة التحكم
++@staff_required
+ def dashboard(request):
+-    total_books = Book.objects.count()
+-    available_books = Book.objects.filter(available=True).count()
+-    borrowed_books = Book.objects.filter(available=False).count()
+-    total_borrowings = Borrowing.objects.count()
+-    recent_borrowings = Borrowing.objects.order_by('-borrow_date')[:5]
+-    
+     context = {
+-        'total_books': total_books,
+-        'available_books': available_books,
+-        'borrowed_books': borrowed_books,
+-        'total_borrowings': total_borrowings,
+-        'recent_borrowings': recent_borrowings,
++        'total_books': Book.objects.count(),
++        'available_books': Book.objects.filter(available=True, quantity__gt=0).count(),
++        'borrowed_books': Borrowing.objects.filter(returned=False).count(),
++        'total_borrowings': Borrowing.objects.count(),
++        'recent_borrowings': Borrowing.objects.select_related('book', 'user')
++                                              .order_by('-borrow_date', '-pk')[:20],
+     }
+-    return render(request, 'library/dashboard.html', context)
+\ No newline at end of file
++    return render(request, 'library/dashboard.html', context)
++
++
++# حذف سجل استعارة (للمسؤول، للسجلات المُرجعة فقط)
++@staff_required
++def borrowing_delete(request, pk):
++    borrowing = get_object_or_404(Borrowing, pk=pk)
++
++    if not borrowing.returned:
++        messages.error(request, 'لا يمكن حذف سجل لم يُرجع كتابه بعد.')
++        return redirect('dashboard')
++
++    if request.method == 'POST':
++        borrowing.delete()
++        messages.success(request, 'تم حذف سجل الاستعارة ✅')
++        return redirect('dashboard')
++
++    return render(request, 'library/borrowing_confirm_delete.html', {'borrowing': borrowing})
+diff --git a/library_project/settings.py b/library_project/settings.py
+index fb8e02c..5fbdc6c 100644
+--- a/library_project/settings.py
++++ b/library_project/settings.py
+@@ -25,7 +25,7 @@ SECRET_KEY = 'django-insecure-o7td!v(f@9uqg18cx$qw&zf__97$2(5)15)5lg%an+*r)2v+a3
+ # SECURITY WARNING: don't run with debug turned on in production!
+ DEBUG = True
+ 
+-ALLOWED_HOSTS = []
++ALLOWED_HOSTS = ['*']  # للتجربة؛ في الإنتاج ضع نطاقك
+ 
+ 
+ # Application definition
+@@ -104,9 +104,9 @@ AUTH_PASSWORD_VALIDATORS = [
+ # Internationalization
+ # https://docs.djangoproject.com/en/4.2/topics/i18n/
+ 
+-LANGUAGE_CODE = 'en-us'
++LANGUAGE_CODE = 'ar'
+ 
+-TIME_ZONE = 'UTC'
++TIME_ZONE = 'Asia/Damascus'
+ 
+ USE_I18N = True
+ 
+@@ -124,4 +124,4 @@ STATIC_URL = 'static/'
+ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+ LOGIN_URL = '/login/'
+ LOGIN_REDIRECT_URL = '/'
+-LOGOUT_REDIRECT_URL = '/'
+\ No newline at end of file
++LOGOUT_REDIRECT_URL = '/'
+\ No newline at end of file
+diff --git a/templates/library/base.html b/templates/library/base.html
+index 41c7f63..f96ba34 100644
+--- a/templates/library/base.html
++++ b/templates/library/base.html
+@@ -7,10 +7,20 @@
+     <meta charset="UTF-8">
+ 
+     <meta name="viewport"
+-          content="width=device-width, initial-scale=1.0">
++          content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+ 
+     <title>{% block title %}نظام إدارة المكتبة{% endblock %}</title>
+ 
++    <!-- PWA -->
++    <link rel="manifest" href="/manifest.json">
++    <meta name="theme-color" content="#14232d">
++    <meta name="mobile-web-app-capable" content="yes">
++    <meta name="apple-mobile-web-app-capable" content="yes">
++    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
++    <meta name="apple-mobile-web-app-title" content="المكتبة">
++    <link rel="apple-touch-icon" href="{% static 'library/icons/icon-192.png' %}">
++    <link rel="icon" type="image/png" href="{% static 'library/icons/icon-192.png' %}">
++
+     <link
+         href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
+         rel="stylesheet">
+@@ -44,6 +54,7 @@
+         .main-navbar {
+             background: rgba(20, 35, 45, 0.96);
+             box-shadow: 0 2px 10px rgba(0, 0, 0, 0.25);
++            padding-top: env(safe-area-inset-top);
+         }
+ 
+         .main-navbar .navbar-brand {
+@@ -198,6 +209,7 @@
+         /* الجداول */
+         .table-container {
+             overflow-x: auto;
++            -webkit-overflow-scrolling: touch;
+         }
+ 
+         .table {
+@@ -216,9 +228,25 @@
+             margin-top: 25px;
+         }
+ 
++        /* شريط التنقل السفلي (للجوال فقط) */
++        .bottom-nav {
++            display: none;
++        }
++
++        /* زر تثبيت التطبيق */
++        #installBtn {
++            display: none;
++        }
++
+         /* الهواتف */
+         @media (max-width: 768px) {
+ 
++            /* background-attachment: fixed غير مدعوم جيداً على الجوال */
++            body {
++                background-attachment: scroll;
++                padding-bottom: calc(64px + env(safe-area-inset-bottom));
++            }
++
+             .main-container {
+                 width: 94%;
+                 padding-top: 15px;
+@@ -236,6 +264,62 @@
+                 min-height: auto;
+             }
+ 
++            /* أهداف لمس أكبر */
++            .btn {
++                min-height: 40px;
++            }
++
++            .btn-sm {
++                min-height: 36px;
++                display: inline-flex;
++                align-items: center;
++            }
++
++            /* منع تكبير iOS التلقائي عند التركيز على الحقول */
++            input,
++            select,
++            textarea,
++            .form-control {
++                font-size: 16px !important;
++            }
++
++            .main-footer {
++                margin-bottom: 0;
++            }
++
++            .bottom-nav {
++                display: flex;
++                position: fixed;
++                bottom: 0;
++                left: 0;
++                right: 0;
++                z-index: 1030;
++
++                background: rgba(20, 35, 45, 0.98);
++                border-top: 1px solid rgba(255, 255, 255, 0.12);
++
++                padding-bottom: env(safe-area-inset-bottom);
++            }
++
++            .bottom-nav a {
++                flex: 1;
++                text-align: center;
++                color: #cfd8dc;
++                text-decoration: none;
++
++                padding: 8px 2px;
++                font-size: 0.72rem;
++                line-height: 1.3;
++            }
++
++            .bottom-nav a .icon {
++                display: block;
++                font-size: 1.25rem;
++            }
++
++            .bottom-nav a.active {
++                color: #ffc107;
++            }
+         }
+ 
+     </style>
+@@ -245,56 +329,76 @@
+ <body>
+ 
+     <!-- الشريط العلوي -->
+-    <nav class="navbar navbar-dark main-navbar">
++    <nav class="navbar navbar-dark navbar-expand-md main-navbar">
+         <div class="container">
+ 
+             <a class="navbar-brand" href="/">
+                 📚 مكتبة الجامعة
+             </a>
+ 
+-            <div class="d-flex gap-2 align-items-center">
++            <button class="navbar-toggler d-md-none"
++                    type="button"
++                    data-bs-toggle="collapse"
++                    data-bs-target="#topNav"
++                    aria-controls="topNav"
++                    aria-expanded="false"
++                    aria-label="القائمة">
++                <span class="navbar-toggler-icon"></span>
++            </button>
+ 
+-                <a href="/search/"
+-                   class="btn btn-outline-light btn-sm nav-btn">
+-                    🔍 بحث
+-                </a>
++            <div class="collapse navbar-collapse" id="topNav">
+ 
+-                {% if user.is_authenticated %}
++                <div class="d-flex flex-column flex-md-row gap-2 align-items-stretch align-items-md-center ms-md-auto mt-3 mt-md-0 mb-2 mb-md-0">
+ 
+-                    {% if user.is_staff %}
+-                    <a href="/dashboard/"
+-                       class="btn btn-outline-info btn-sm nav-btn">
+-                        📊 لوحة التحكم
+-                    </a>
+-                    {% endif %}
++                    <button id="installBtn"
++                            type="button"
++                            class="btn btn-warning btn-sm nav-btn">
++                        ⬇ تثبيت التطبيق
++                    </button>
+ 
+-                    <a href="/my-books/"
+-                       class="btn btn-outline-warning btn-sm nav-btn">
+-                        📖 كتبي
++                    <a href="/search/"
++                       class="btn btn-outline-light btn-sm nav-btn">
++                        🔍 بحث
+                     </a>
+ 
+-                    <span class="text-white small">
+-                        👤 {{ user.username }}
+-                    </span>
++                    {% if user.is_authenticated %}
+ 
+-                    <a href="/logout/"
+-                       class="btn btn-outline-danger btn-sm nav-btn">
+-                        خروج
+-                    </a>
++                        {% if user.is_staff %}
++                        <a href="/dashboard/"
++                           class="btn btn-outline-info btn-sm nav-btn">
++                            📊 لوحة التحكم
++                        </a>
++                        {% endif %}
+ 
+-                {% else %}
++                        <a href="/my-books/"
++                           class="btn btn-outline-warning btn-sm nav-btn">
++                            📖 كتبي
++                        </a>
+ 
+-                    <a href="/login/"
+-                       class="btn btn-outline-light btn-sm nav-btn">
+-                        دخول
+-                    </a>
++                        <span class="text-white small">
++                            👤 {{ user.username }}
++                        </span>
+ 
+-                    <a href="/register/"
+-                       class="btn btn-success btn-sm nav-btn">
+-                        حساب جديد
+-                    </a>
++                        <a href="/logout/"
++                           class="btn btn-outline-danger btn-sm nav-btn">
++                            خروج
++                        </a>
++
++                    {% else %}
+ 
+-                {% endif %}
++                        <a href="/login/"
++                           class="btn btn-outline-light btn-sm nav-btn">
++                            دخول
++                        </a>
++
++                        <a href="/register/"
++                           class="btn btn-success btn-sm nav-btn">
++                            حساب جديد
++                        </a>
++
++                    {% endif %}
++
++                </div>
+ 
+             </div>
+         </div>
+@@ -336,9 +440,91 @@
+     </footer>
+ 
+ 
++    <!-- شريط التنقل السفلي للجوال -->
++    <nav class="bottom-nav" aria-label="التنقل السريع">
++
++        <a href="/" class="{% if request.path == '/' %}active{% endif %}">
++            <span class="icon">🏠</span>
++            الرئيسية
++        </a>
++
++        <a href="/search/" class="{% if request.path == '/search/' %}active{% endif %}">
++            <span class="icon">🔍</span>
++            بحث
++        </a>
++
++        {% if user.is_authenticated %}
++
++        <a href="/my-books/" class="{% if request.path == '/my-books/' %}active{% endif %}">
++            <span class="icon">📖</span>
++            كتبي
++        </a>
++
++            {% if user.is_staff %}
++            <a href="/dashboard/" class="{% if request.path == '/dashboard/' %}active{% endif %}">
++                <span class="icon">📊</span>
++                التحكم
++            </a>
++            {% endif %}
++
++        <a href="/logout/">
++            <span class="icon">🚪</span>
++            خروج
++        </a>
++
++        {% else %}
++
++        <a href="/login/" class="{% if request.path == '/login/' %}active{% endif %}">
++            <span class="icon">🔐</span>
++            دخول
++        </a>
++
++        <a href="/register/" class="{% if request.path == '/register/' %}active{% endif %}">
++            <span class="icon">👤</span>
++            حساب جديد
++        </a>
++
++        {% endif %}
++
++    </nav>
++
++
+     <script
+         src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js">
+     </script>
+ 
++    <script>
++        // تسجيل الـ Service Worker
++        if ('serviceWorker' in navigator) {
++            window.addEventListener('load', function () {
++                navigator.serviceWorker.register('/sw.js', { scope: '/' })
++                    .catch(function (err) { console.warn('SW:', err); });
++            });
++        }
++
++        // زر "تثبيت التطبيق" (أندرويد / كروم)
++        var deferredPrompt = null;
++        var installBtn = document.getElementById('installBtn');
++
++        window.addEventListener('beforeinstallprompt', function (e) {
++            e.preventDefault();
++            deferredPrompt = e;
++            installBtn.style.display = 'inline-flex';
++        });
++
++        installBtn.addEventListener('click', function () {
++            if (!deferredPrompt) return;
++            deferredPrompt.prompt();
++            deferredPrompt.userChoice.then(function () {
++                deferredPrompt = null;
++                installBtn.style.display = 'none';
++            });
++        });
++
++        window.addEventListener('appinstalled', function () {
++            installBtn.style.display = 'none';
++        });
++    </script>
++
+ </body>
+-</html>
+\ No newline at end of file
++</html>
+diff --git a/templates/library/offline.html b/templates/library/offline.html
+new file mode 100644
+index 0000000..e1ffa5f
+--- /dev/null
++++ b/templates/library/offline.html
+@@ -0,0 +1,11 @@
++{% extends 'library/base.html' %}
++
++{% block title %}بدون اتصال{% endblock %}
++
++{% block content %}
++<div class="content-panel text-center py-5">
++    <h2 class="mb-3">📡 لا يوجد اتصال بالإنترنت</h2>
++    <p class="mb-4">تحقق من اتصالك ثم أعد المحاولة.</p>
++    <a href="/" class="btn btn-primary">إعادة المحاولة</a>
++</div>
++{% endblock %}
+-- 
+2.43.0
+
