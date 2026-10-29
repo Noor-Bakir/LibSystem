@@ -1,5 +1,5 @@
 from django.urls import path
-from . import views
+from . import views, pwa
 
 urlpatterns = [
     path('', views.book_list, name='book_list'),
@@ -15,4 +15,10 @@ urlpatterns = [
     path('borrowing/<int:pk>/return/', views.return_book, name='return_book'),
     path('my-books/', views.my_books, name='my_books'),
     path('dashboard/', views.dashboard, name='dashboard'),
+    path('borrowing/<int:pk>/delete/', views.borrowing_delete, name='borrowing_delete'),
+
+    # PWA
+    path('manifest.json', pwa.manifest, name='manifest'),
+    path('sw.js', pwa.service_worker, name='service_worker'),
+    path('offline/', pwa.offline, name='offline'),
 ]
